@@ -1,0 +1,6 @@
+{
+  "name": "Prostuti Payment Listener",
+  "description": "Dedicated Android helper app to detect, parse, and verify bKash, Nagad, Rocket, and Upay payment notifications and SMS for Prostuti.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

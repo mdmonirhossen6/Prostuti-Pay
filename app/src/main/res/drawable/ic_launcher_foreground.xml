@@ -1,0 +1,47 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Base Shield/Receipt Background -->
+    <path
+        android:pathData="M32,32 C32,27.5 35.5,24 40,24 L68,24 C72.5,24 76,27.5 76,32 L76,68 C76,78 64,84 54,87 C44,84 32,78 32,68 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="32"
+                android:startY="24"
+                android:endX="76"
+                android:endY="87"
+                android:type="linear">
+                <item android:color="#0284C7" android:offset="0.0" />
+                <item android:color="#0D9488" android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <!-- Inner Card Chip/Card Slot Accent -->
+    <path
+        android:pathData="M39,33 L69,33 C70.5,33 71,34 71,35 L71,43 L37,43 L37,35 C37,34 37.5,33 39,33 Z"
+        android:fillColor="#1E293B" />
+    <path
+        android:pathData="M43,37 L49,37 C49.5,37 50,37.5 50,38 C50,38.5 49.5,39 49,39 L43,39 C42.5,39 42,38.5 42,38 C42,37.5 42.5,37 43,37 Z"
+        android:fillColor="#38BDF8" />
+    <!-- Taka / Currency symbol & Checkmark -->
+    <path
+        android:pathData="M46,62 L52,68 L64,52"
+        android:strokeWidth="4.5"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <!-- Incoming Radar / Signal pulse lines -->
+    <path
+        android:pathData="M48,47 C50,45.5 54,45 58,46.5"
+        android:strokeWidth="2.5"
+        android:strokeColor="#38BDF8"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M44,44 C48,42 56,41.5 62,43.5"
+        android:strokeWidth="2"
+        android:strokeColor="#7DD3FC"
+        android:strokeLineCap="round" />
+</vector>
