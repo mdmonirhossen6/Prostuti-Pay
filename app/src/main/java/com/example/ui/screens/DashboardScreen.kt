@@ -86,7 +86,8 @@ fun DashboardScreen(
     viewModel: MainViewModel,
     modifier: Modifier = Modifier,
     onNavigateToTransactions: () -> Unit = {},
-    onNavigateToTest: () -> Unit = {}
+    onNavigateToTest: () -> Unit = {},
+    onNavigateToWizard: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val config by viewModel.config.collectAsStateWithLifecycle()
@@ -241,6 +242,96 @@ fun DashboardScreen(
                             }
                         }
                     }
+                }
+            }
+        }
+
+        // Setup Wizard Progress Banner
+        if (!config.setupWizardCompleted) {
+            item {
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = PrimaryIndigo.copy(alpha = 0.08f)
+                    ),
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Setup Wizard Incomplete",
+                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold, color = PrimaryIndigo)
+                            )
+                            Text(
+                                text = "Step ${config.setupCurrentStep} of 12. Tap to complete dedicated device setup.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Button(
+                            onClick = { onNavigateToWizard() },
+                            colors = ButtonDefaults.buttonColors(containerColor = PrimaryIndigo),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text("Resume", fontSize = 12.sp)
+                        }
+                    }
+                }
+            }
+        }
+
+        // Payment Tolerance Status Overview Banner
+        item {
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surface
+                ),
+                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(PrimaryIndigo.copy(alpha = 0.1f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "±৳",
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, color = PrimaryIndigo)
+                            )
+                        }
+                        Column {
+                            Text(
+                                text = "Payment Price Tolerance",
+                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
+                            )
+                            Text(
+                                text = if (config.toleranceEnabled) "Global allowance: ±৳${config.globalTolerance.toInt()} (Ceiling: ৳${config.maxTolerance.toInt()})" else "Exact price matching strictly enforced (৳0.00)",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    StatusChip(status = if (config.toleranceEnabled) "APPROVED" else "PENDING")
                 }
             }
         }

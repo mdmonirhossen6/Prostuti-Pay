@@ -81,11 +81,24 @@ class MainViewModel : ViewModel() {
     private val _selectedEvent = MutableStateFlow<PaymentEvent?>(null)
     val selectedEvent: StateFlow<PaymentEvent?> = _selectedEvent.asStateFlow()
 
+    // Health Check state
+    private val _isCheckingHealth = MutableStateFlow(false)
+    val isCheckingHealth: StateFlow<Boolean> = _isCheckingHealth.asStateFlow()
+
+    private val _healthCheckResult = MutableStateFlow<com.example.services.BackendHealthResult?>(null)
+    val healthCheckResult: StateFlow<com.example.services.BackendHealthResult?> = _healthCheckResult.asStateFlow()
+
     // Test Sandbox state
     private val _testInput = MutableStateFlow(
         "You have received Tk 500.00 from 01712345678. Fee Tk 0.00. Balance Tk 1,500.00. TrxID BKA8921XYZ at 12/09/2026 14:30"
     )
     val testInput: StateFlow<String> = _testInput.asStateFlow()
+
+    private val _testExpectedPrice = MutableStateFlow(500.0)
+    val testExpectedPrice: StateFlow<Double> = _testExpectedPrice.asStateFlow()
+
+    private val _testTolerance = MutableStateFlow(10.0)
+    val testTolerance: StateFlow<Double> = _testTolerance.asStateFlow()
 
     private val _testParseResult = MutableStateFlow<PaymentParseResult?>(null)
     val testParseResult: StateFlow<PaymentParseResult?> = _testParseResult.asStateFlow()
@@ -146,6 +159,19 @@ class MainViewModel : ViewModel() {
             finalPrice = 300.0,
             status = "pending",
             orderId = "ORD-2026-904"
+        ),
+        PaymentRequest(
+            id = "req_tolerance_test_04",
+            userId = "usr_sumon_55",
+            userEmail = "sumon@example.com",
+            fromNumber = "01799887766",
+            transactionId = "BKTOL1000",
+            method = "bKash",
+            plan = "University Admission VIP",
+            price = 1000.0,
+            finalPrice = 1000.0,
+            status = "pending",
+            orderId = "ORD-2026-905"
         )
     )
 
@@ -185,6 +211,88 @@ class MainViewModel : ViewModel() {
         }
     }
 
+    fun updateGlobalTolerance(tolerance: Double) {
+        viewModelScope.launch {
+            val current = config.value
+            val clamped = tolerance.coerceIn(current.minTolerance, current.maxTolerance)
+            repository.updateConfig(current.copy(globalTolerance = clamped))
+        }
+    }
+
+    fun updateMaxTolerance(maxTol: Double) {
+        viewModelScope.launch {
+            val current = config.value
+            val clamped = maxTol.coerceIn(10.0, 500.0)
+            repository.updateConfig(current.copy(maxTolerance = clamped))
+        }
+    }
+
+    fun toggleToleranceEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            val current = config.value
+            repository.updateConfig(current.copy(toleranceEnabled = enabled))
+        }
+    }
+
+    fun setPerPlanTolerance(planName: String, tolerance: Double) {
+        viewModelScope.launch {
+            val current = config.value
+            val map = current.getPerPlanToleranceMap().toMutableMap()
+            map[planName] = tolerance.coerceIn(current.minTolerance, current.maxTolerance)
+            val json = org.json.JSONObject(map as Map<*, *>).toString()
+            repository.updateConfig(current.copy(perPlanToleranceJson = json))
+        }
+    }
+
+    fun removePerPlanTolerance(planName: String) {
+        viewModelScope.launch {
+            val current = config.value
+            val map = current.getPerPlanToleranceMap().toMutableMap()
+            map.remove(planName)
+            val json = org.json.JSONObject(map as Map<*, *>).toString()
+            repository.updateConfig(current.copy(perPlanToleranceJson = json))
+        }
+    }
+
+    fun resetConfigToDefaults() {
+        viewModelScope.launch {
+            repository.resetConfigToDefaults()
+        }
+    }
+
+    fun setWizardStep(step: Int) {
+        viewModelScope.launch {
+            val current = config.value
+            repository.updateConfig(current.copy(setupCurrentStep = step))
+        }
+    }
+
+    fun completeWizard() {
+        viewModelScope.launch {
+            val current = config.value
+            repository.updateConfig(current.copy(setupWizardCompleted = true, setupCurrentStep = 12))
+        }
+    }
+
+    fun resetWizard() {
+        viewModelScope.launch {
+            val current = config.value
+            repository.updateConfig(current.copy(setupWizardCompleted = false, setupCurrentStep = 1))
+        }
+    }
+
+    fun runBackendHealthCheck() {
+        viewModelScope.launch {
+            _isCheckingHealth.value = true
+            try {
+                val result = backendService.checkBackendHealth(config.value)
+                _healthCheckResult.value = result
+            } finally {
+                _isCheckingHealth.value = false
+            }
+        }
+    }
+
     fun syncQueue() {
         viewModelScope.launch {
             _isSyncing.value = true
@@ -201,6 +309,14 @@ class MainViewModel : ViewModel() {
         _testInput.value = text
     }
 
+    fun setTestExpectedPrice(price: Double) {
+        _testExpectedPrice.value = price
+    }
+
+    fun setTestTolerance(tolerance: Double) {
+        _testTolerance.value = tolerance
+    }
+
     fun runTestParse() {
         val input = _testInput.value
         val result = parserEngine.testParse(input, source = "test_mode")
@@ -210,6 +326,7 @@ class MainViewModel : ViewModel() {
 
     fun runTestBackendMatch() {
         val parsed = _testParseResult.value ?: return
+        val currentConfig = config.value
         val dummyEvent = PaymentEvent(
             id = 9999,
             fingerprint = parsed.createFingerprint(),
@@ -224,8 +341,51 @@ class MainViewModel : ViewModel() {
             receivedAt = parsed.timestamp,
             status = "parsed"
         )
-        val matchResult = backendService.simulateBackendMatch(dummyEvent, samplePendingRequests)
+        val matchResult = backendService.simulateBackendMatch(dummyEvent, samplePendingRequests, currentConfig)
         _testMatchResult.value = matchResult
+    }
+
+    fun loadPresetScenario(preset: String) {
+        when (preset) {
+            "bkash_valid" -> {
+                _testInput.value = "You have received Tk 500.00 from 01712345678. Fee Tk 0.00. Balance Tk 1,500.00. TrxID BKA8921XYZ at 12/09/2026 14:30"
+                _testExpectedPrice.value = 500.0
+                _testTolerance.value = 10.0
+            }
+            "nagad_valid" -> {
+                _testInput.value = "Cash In received. Amount: Tk 650.00, Sender: 01812345678, TxnID: 72N0ABCD, Balance: Tk 2,150.00"
+                _testExpectedPrice.value = 650.0
+                _testTolerance.value = 10.0
+            }
+            "tolerance_accept_under" -> {
+                // Expected ৳1000, received ৳995 with ৳10 tolerance -> should auto-approve!
+                _testInput.value = "You have received Tk 995.00 from 01799887766. Fee Tk 0.00. Balance Tk 3,450.00. TrxID BKTOL1000 at 12/09/2026 15:00"
+                _testExpectedPrice.value = 1000.0
+                _testTolerance.value = 10.0
+            }
+            "tolerance_reject_under" -> {
+                // Expected ৳1000, received ৳985 with ৳10 tolerance -> outside tolerance, rejected!
+                _testInput.value = "You have received Tk 985.00 from 01799887766. Fee Tk 0.00. Balance Tk 3,450.00. TrxID BKTOL1000 at 12/09/2026 15:00"
+                _testExpectedPrice.value = 1000.0
+                _testTolerance.value = 10.0
+            }
+            "rocket_valid" -> {
+                _testInput.value = "Tk500.00 received from 01712345678 to A/C 01987654321-0 TxnId: RCK9871234 Balance: Tk 1,200.00"
+                _testExpectedPrice.value = 500.0
+                _testTolerance.value = 0.0
+            }
+            "upay_valid" -> {
+                _testInput.value = "Received Tk 450.00 from 01812345678. Fee Tk 0. TxnID: UP778899. Balance Tk 900. Ref: TEST"
+                _testExpectedPrice.value = 450.0
+                _testTolerance.value = 5.0
+            }
+            "ambiguous_duplicate" -> {
+                _testInput.value = "You have received Tk 300.00 from 01912345678. TrxID DUPLICATE_TRX_999."
+                _testExpectedPrice.value = 300.0
+                _testTolerance.value = 10.0
+            }
+        }
+        runTestParse()
     }
 
     fun saveTestEventToQueue() {

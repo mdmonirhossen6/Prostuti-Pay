@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Dashboard
+import androidx.compose.material.icons.filled.HelpOutline
 import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.filled.Settings
@@ -33,6 +34,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.ui.MainViewModel
 import com.example.ui.screens.DashboardScreen
 import com.example.ui.screens.SettingsScreen
+import com.example.ui.screens.SetupWizardScreen
 import com.example.ui.screens.TestParserScreen
 import com.example.ui.screens.TransactionDetailDialog
 import com.example.ui.screens.TransactionLogScreen
@@ -110,9 +112,16 @@ fun MainScreen(viewModel: MainViewModel) {
         NavigationBarItem(
           selected = selectedTab == 3,
           onClick = { viewModel.selectTab(3) },
-          icon = { Icon(Icons.Default.Settings, contentDescription = "Settings") },
-          label = { Text("Settings") },
+          icon = { Icon(Icons.Default.Settings, contentDescription = "Config") },
+          label = { Text("Config") },
           modifier = Modifier.testTag("nav_item_settings")
+        )
+        NavigationBarItem(
+          selected = selectedTab == 4,
+          onClick = { viewModel.selectTab(4) },
+          icon = { Icon(Icons.Default.HelpOutline, contentDescription = "Setup & Help") },
+          label = { Text("Setup & Help") },
+          modifier = Modifier.testTag("nav_item_setup_wizard")
         )
       }
     }
@@ -122,7 +131,8 @@ fun MainScreen(viewModel: MainViewModel) {
         viewModel = viewModel,
         modifier = Modifier.padding(innerPadding),
         onNavigateToTransactions = { viewModel.selectTab(1) },
-        onNavigateToTest = { viewModel.selectTab(2) }
+        onNavigateToTest = { viewModel.selectTab(2) },
+        onNavigateToWizard = { viewModel.selectTab(4) }
       )
       1 -> TransactionLogScreen(
         viewModel = viewModel,
@@ -135,6 +145,12 @@ fun MainScreen(viewModel: MainViewModel) {
       3 -> SettingsScreen(
         viewModel = viewModel,
         modifier = Modifier.padding(innerPadding)
+      )
+      4 -> SetupWizardScreen(
+        viewModel = viewModel,
+        modifier = Modifier.padding(innerPadding),
+        onNavigateToConfig = { viewModel.selectTab(3) },
+        onNavigateToSandbox = { viewModel.selectTab(2) }
       )
     }
 

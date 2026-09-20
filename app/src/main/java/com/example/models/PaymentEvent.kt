@@ -13,7 +13,8 @@ import androidx.room.PrimaryKey
     indices = [
         Index(value = ["fingerprint"], unique = true),
         Index(value = ["transactionId"]),
-        Index(value = ["status"])
+        Index(value = ["status"]),
+        Index(value = ["receivedAt"])
     ]
 )
 data class PaymentEvent(
@@ -34,5 +35,21 @@ data class PaymentEvent(
     val verificationDetails: String? = null,
     val retryCount: Int = 0,
     val lastRetryTimestamp: Long = 0L,
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+
+    // Extended tolerance and matching audit fields
+    val expectedAmount: Double? = null,
+    val tolerance: Double? = null,
+    val minAcceptedAmount: Double? = null,
+    val maxAcceptedAmount: Double? = null,
+    val amountDifference: Double? = null,
+    val parserVersion: String = "1.2",
+    val parseStatus: String = "parsed",
+    val syncStatus: String = "pending", // "synced", "pending", "failed"
+    val backendStatus: String = "pending", // "approved", "rejected", "unmatched", "ambiguous", "error"
+    val backendMessage: String? = null,
+    val createdAt: Long = System.currentTimeMillis(),
+    val updatedAt: Long = System.currentTimeMillis(),
+    val auditLogJson: String = "[]"
 )
+

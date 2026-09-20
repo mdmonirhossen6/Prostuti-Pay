@@ -50,6 +50,7 @@ import com.example.ui.theme.PrimaryIndigo
 import com.example.ui.theme.Slate100
 import com.example.ui.theme.Slate700
 import com.example.ui.theme.Slate800
+import com.example.ui.theme.StatusError
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -211,6 +212,29 @@ fun TransactionCardItem(
             }
 
             Spacer(modifier = Modifier.height(10.dp))
+
+            // Tolerance badge row if evaluated
+            if (event.expectedAmount != null && event.tolerance != null) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "Plan: ৳${event.expectedAmount.toInt()} (±৳${event.tolerance.toInt()})",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    if (event.amountDifference != null && kotlin.math.abs(event.amountDifference) > 0.01) {
+                        Text(
+                            text = "Diff: ৳${String.format(Locale.US, "%+.2f", event.amountDifference)}",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            color = if (event.status == "approved") PrimaryIndigo else StatusError
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+            }
 
             Row(
                 modifier = Modifier.fillMaxWidth(),

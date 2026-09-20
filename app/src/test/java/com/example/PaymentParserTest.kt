@@ -161,4 +161,92 @@ class PaymentParserTest {
         assertEquals("ambiguous", match.status)
         assertEquals(2, match.candidateCount)
     }
+
+    @Test
+    fun testToleranceMatching_WithinTolerance() {
+        val event = PaymentEvent(
+            id = 3,
+            fingerprint = "fp3",
+            method = "bKash",
+            transactionId = "BKA_TOL_1",
+            amount = 995.0, // ৳5 under expected
+            sender = "01712345678",
+            source = "sms",
+            rawText = "sms",
+            status = "parsed"
+        )
+        val pending = listOf(
+            PaymentRequest(
+                id = "req_plan_1000",
+                userId = "usr_tol_1",
+                fromNumber = "01712345678",
+                transactionId = "BKA_TOL_1",
+                method = "bKash",
+                price = 1000.0,
+                status = "pending",
+                plan = "hsc_annual"
+            )
+        )
+
+        // Tolerance is 10.0 -> accepted range is 990.0 to 1010.0
+        val testConfig = com.example.models.PaymentConfig(
+            toleranceEnabled = true,
+            globalTolerance = 10.0,
+            maxTolerance = 50.0
+        )
+        val match = backendService.simulateBackendMatch(event, pending, config = testConfig)
+        assertTrue(match.success)
+        assertEquals("approved", match.status)
+        assertEquals("req_plan_1000", match.matchedRequestId)
+        assertEquals(1000.0, match.expectedAmount ?: 0.0, 0.01)
+        assertEquals(5.0, match.amountDifference ?: 0.0, 0.01)
+    }
+
+    @Test
+    fun testToleranceMatching_ExceedsTolerance() {
+        val event = PaymentEvent(
+            id = 4,
+            fingerprint = "fp4",
+            method = "bKash",
+            transactionId = "BKA_TOL_2",
+            amount = 985.0, // ৳15 under expected, but tolerance is 10
+            sender = "01712345678",
+            source = "sms",
+            rawText = "sms",
+            status = "parsed"
+        )
+        val pending = listOf(
+            PaymentRequest(
+                id = "req_plan_1000",
+                userId = "usr_tol_2",
+                fromNumber = "01712345678",
+                transactionId = "BKA_TOL_2",
+                method = "bKash",
+                price = 1000.0,
+                status = "pending",
+                plan = "hsc_annual"
+            )
+        )
+
+        val testConfig = com.example.models.PaymentConfig(
+            toleranceEnabled = true,
+            globalTolerance = 10.0,
+            maxTolerance = 50.0
+        )
+        val match = backendService.simulateBackendMatch(event, pending, config = testConfig)
+        org.junit.Assert.assertFalse(match.success)
+        assertEquals("rejected", match.status) // Outside tolerance criteria
+        assertEquals("Amount ৳985.0 is below minimum accepted ৳990.0 (Expected: ৳1000.0, Tolerance: ৳10.0)", match.message?.removePrefix("SIMULATION: Rejected: ")?.trim())
+    }
+
+    @Test
+    fun testBengaliNumeralNormalization() {
+        val bengaliAmount = "৳১,৫৫০.৫০"
+        val converted = Normalizer.parseAmount(bengaliAmount)
+        assertEquals(1550.50, converted, 0.001)
+
+        val bengaliPhone = "০১৭১২৩৪৫৬৭৮"
+        val normalizedPhone = Normalizer.normalizePhoneNumber(bengaliPhone)
+        assertEquals("01712345678", normalizedPhone)
+    }
 }

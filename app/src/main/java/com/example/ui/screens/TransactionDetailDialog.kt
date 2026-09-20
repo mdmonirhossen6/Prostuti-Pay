@@ -24,16 +24,16 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Divider
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -41,16 +41,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.models.PaymentEvent
 import com.example.ui.MainViewModel
+import com.example.ui.components.AuditTimelineView
+import com.example.ui.components.StatusBadge
 import com.example.ui.theme.PrimaryIndigo
 import com.example.ui.theme.Slate100
-import com.example.ui.theme.Slate700
 import com.example.ui.theme.Slate800
 import com.example.ui.theme.StatusApproved
 import com.example.ui.theme.StatusError
@@ -92,7 +92,7 @@ fun TransactionDetailDialog(
                         )
                     }
                 }
-                StatusChip(status = event.status)
+                StatusBadge(status = event.status)
             }
         },
         text = {
@@ -138,11 +138,51 @@ fun TransactionDetailDialog(
                 DetailRow(label = "Input Source", value = event.source.uppercase())
                 DetailRow(label = "Deduplication Fingerprint", value = event.fingerprint.take(16) + "...", isMonospace = true)
 
-                Spacer(modifier = Modifier.height(10.dp))
+                // 2. Tolerance & Match Evaluation Section (If evaluated)
+                if (event.expectedAmount != null || event.tolerance != null) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "Tolerance & Pricing Breakdown",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp,
+                        color = Slate800
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
 
-                // Verification & Audit Trail Section
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        shape = RoundedCornerShape(10.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            if (event.expectedAmount != null) {
+                                DetailRow(label = "Expected Plan Price", value = "৳${String.format(Locale.US, "%.2f", event.expectedAmount)}")
+                            }
+                            if (event.tolerance != null) {
+                                DetailRow(label = "Allowed Tolerance", value = "±৳${String.format(Locale.US, "%.2f", event.tolerance)}")
+                            }
+                            if (event.minAcceptedAmount != null && event.maxAcceptedAmount != null) {
+                                DetailRow(
+                                    label = "Accepted Price Range",
+                                    value = "৳${event.minAcceptedAmount.toInt()} – ৳${event.maxAcceptedAmount.toInt()}"
+                                )
+                            }
+                            if (event.amountDifference != null) {
+                                val isZero = kotlin.math.abs(event.amountDifference) < 0.01
+                                DetailRow(
+                                    label = "Price Difference",
+                                    value = if (isZero) "Exact (৳0.00)" else "৳${String.format(Locale.US, "%+.2f", event.amountDifference)}"
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Verification & Match Status
                 Text(
-                    text = "Verification & Audit Trail",
+                    text = "Verification & Backend Match",
                     fontWeight = FontWeight.Bold,
                     fontSize = 13.sp,
                     color = Slate800
@@ -158,7 +198,7 @@ fun TransactionDetailDialog(
                         .padding(10.dp)
                 ) {
                     Column {
-                        AuditRow(label = "Verification Source", value = "auto_sms_listener")
+                        AuditRow(label = "Verification Source", value = "auto_${event.source}_listener")
                         AuditRow(
                             label = "Matched Request ID",
                             value = event.matchedPaymentRequestId ?: "None (Awaiting matching request)"
@@ -175,6 +215,18 @@ fun TransactionDetailDialog(
                         }
                     }
                 }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Audit Trail History Timeline
+                Text(
+                    text = "Audit Event History",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp,
+                    color = Slate800
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                AuditTimelineView(auditJson = event.auditLogJson)
 
                 Spacer(modifier = Modifier.height(14.dp))
 
@@ -222,7 +274,7 @@ fun TransactionDetailDialog(
 
                 Spacer(modifier = Modifier.height(14.dp))
 
-                // Manual Actions
+                // Manual Operations
                 Text(
                     text = "Manual Operations",
                     fontWeight = FontWeight.Bold,

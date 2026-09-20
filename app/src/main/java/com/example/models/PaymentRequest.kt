@@ -29,11 +29,17 @@ data class PaymentRequest(
  */
 data class BackendMatchResult(
     val success: Boolean,
-    val status: String, // "approved", "unmatched", "ambiguous", "duplicate", "error"
+    val status: String, // "approved", "unmatched", "ambiguous", "duplicate", "error", "rejected"
     val transactionId: String,
     val matchedRequestId: String? = null,
     val candidateCount: Int = 0,
     val candidateIds: List<String> = emptyList(),
     val message: String? = null,
+    val expectedAmount: Double? = null,
+    val receivedAmount: Double? = null,
+    val tolerance: Double? = null,
+    val minimumAcceptedAmount: Double? = null,
+    val maximumAcceptedAmount: Double? = null,
+    val amountDifference: Double? = null,
     val auditTrail: Map<String, Any?> = emptyMap()
 )

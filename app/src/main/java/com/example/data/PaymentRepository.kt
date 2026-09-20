@@ -26,7 +26,18 @@ class PaymentRepository(
 
     companion object {
         private const val TAG = "PaymentRepository"
-        private const val MAX_RETRIES = 5
+        // 9-step backoff intervals: 5s, 15s, 30s, 1m, 2m, 5m, 10m, 15m, 30m
+        val RETRY_DELAYS_MS = listOf(
+            5_000L,
+            15_000L,
+            30_000L,
+            60_000L,
+            120_000L,
+            300_000L,
+            600_000L,
+            900_000L,
+            1_800_000L
+        )
     }
 
     val allEvents: Flow<List<PaymentEvent>> = eventDao.getAllEvents()
@@ -60,6 +71,14 @@ class PaymentRepository(
             return@withContext existingByTrx
         }
 
+        val initialAudit = org.json.JSONArray().apply {
+            put(org.json.JSONObject().apply {
+                put("timestamp", System.currentTimeMillis())
+                put("action", "PARSED")
+                put("details", "Ingested from ${parseResult.source}. Method: ${parseResult.method}, TrxID: ${parseResult.transactionId}, Amount: ${parseResult.amount}")
+            })
+        }
+
         // 2. Insert new event as "received"
         val newEvent = PaymentEvent(
             fingerprint = fingerprint,
@@ -73,6 +92,9 @@ class PaymentRepository(
             rawText = parseResult.rawText,
             receivedAt = parseResult.timestamp,
             status = "received",
+            syncStatus = "pending",
+            backendStatus = "pending",
+            auditLogJson = initialAudit.toString(),
             retryCount = 0
         )
 
@@ -89,27 +111,61 @@ class PaymentRepository(
     }
 
     /**
-     * Submits an individual event to the backend and updates its status.
+     * Submits an individual event to the backend and updates its status and tolerance audit trail.
      */
     suspend fun syncEventToBackend(event: PaymentEvent, config: PaymentConfig): BackendMatchResult = withContext(Dispatchers.IO) {
         val result = backendService.submitPaymentEvent(event, config)
 
+        val auditArray = try {
+            org.json.JSONArray(event.auditLogJson)
+        } catch (_: Exception) {
+            org.json.JSONArray()
+        }
+
+        auditArray.put(org.json.JSONObject().apply {
+            put("timestamp", System.currentTimeMillis())
+            put("action", "BACKEND_SYNC_ATTEMPT")
+            put("success", result.success)
+            put("status", result.status)
+            put("message", result.message)
+            if (result.expectedAmount != null) put("expectedAmount", result.expectedAmount)
+            if (result.tolerance != null) put("tolerance", result.tolerance)
+            if (result.amountDifference != null) put("amountDifference", result.amountDifference)
+        })
+
+        val now = System.currentTimeMillis()
+        val maxRetries = config.retryMaxAttempts.coerceAtLeast(1)
+
         val updatedEvent = if (result.success) {
             event.copy(
                 status = result.status,
+                syncStatus = "synced",
+                backendStatus = result.status,
                 matchedPaymentRequestId = result.matchedRequestId,
                 verificationDetails = result.message,
-                errorMessage = null
+                errorMessage = null,
+                expectedAmount = result.expectedAmount ?: event.expectedAmount,
+                tolerance = result.tolerance ?: event.tolerance,
+                minAcceptedAmount = result.minimumAcceptedAmount ?: event.minAcceptedAmount,
+                maxAcceptedAmount = result.maximumAcceptedAmount ?: event.maxAcceptedAmount,
+                amountDifference = result.amountDifference ?: event.amountDifference,
+                backendMessage = result.message,
+                updatedAt = now,
+                auditLogJson = auditArray.toString()
             )
         } else {
-            // Failed network request: keep in offline queue with incremented retry
             val newRetryCount = event.retryCount + 1
-            val newStatus = if (newRetryCount >= MAX_RETRIES) "error" else "parsed"
+            val newStatus = if (newRetryCount >= maxRetries) "error" else "parsed"
             event.copy(
                 status = newStatus,
+                syncStatus = "failed",
+                backendStatus = "error",
                 retryCount = newRetryCount,
-                lastRetryTimestamp = System.currentTimeMillis(),
-                errorMessage = result.message
+                lastRetryTimestamp = now,
+                errorMessage = result.message,
+                backendMessage = result.message,
+                updatedAt = now,
+                auditLogJson = auditArray.toString()
             )
         }
 
@@ -118,7 +174,7 @@ class PaymentRepository(
     }
 
     /**
-     * Flushes and synchronizes all pending offline events to Firebase.
+     * Flushes and synchronizes all pending offline events to Firebase using structured backoff.
      */
     suspend fun syncPendingQueue(): Int = withContext(Dispatchers.IO) {
         val pendingEvents = eventDao.getPendingSyncEvents()
@@ -128,8 +184,9 @@ class PaymentRepository(
         var syncedCount = 0
 
         for (event in pendingEvents) {
-            // Exponential backoff check: don't retry too quickly if failed recently
-            val backoffMillis = (1L shl event.retryCount.coerceAtMost(6)) * 2000L
+            // Check structured backoff window
+            val retryIdx = (event.retryCount - 1).coerceIn(0, RETRY_DELAYS_MS.lastIndex)
+            val backoffMillis = if (event.retryCount > 0) RETRY_DELAYS_MS[retryIdx] else 0L
             val elapsed = System.currentTimeMillis() - event.lastRetryTimestamp
             if (event.retryCount > 0 && elapsed < backoffMillis) {
                 continue // Skip until backoff window expires
@@ -147,6 +204,10 @@ class PaymentRepository(
         configDao.insertOrUpdate(newConfig)
     }
 
+    suspend fun resetConfigToDefaults() = withContext(Dispatchers.IO) {
+        configDao.insertOrUpdate(PaymentConfig())
+    }
+
     suspend fun clearAllEvents() = withContext(Dispatchers.IO) {
         eventDao.clearAll()
     }
@@ -157,10 +218,26 @@ class PaymentRepository(
 
     suspend fun manuallyUpdateStatus(id: Long, status: String, notes: String? = null) = withContext(Dispatchers.IO) {
         val event = eventDao.getById(id) ?: return@withContext
+        val auditArray = try {
+            org.json.JSONArray(event.auditLogJson)
+        } catch (_: Exception) {
+            org.json.JSONArray()
+        }
+        auditArray.put(org.json.JSONObject().apply {
+            put("timestamp", System.currentTimeMillis())
+            put("action", "MANUAL_STATUS_UPDATE")
+            put("previousStatus", event.status)
+            put("newStatus", status)
+            put("notes", notes ?: "")
+        })
+
         eventDao.update(
             event.copy(
                 status = status,
-                verificationDetails = notes ?: event.verificationDetails
+                verificationDetails = notes ?: event.verificationDetails,
+                backendStatus = status,
+                updatedAt = System.currentTimeMillis(),
+                auditLogJson = auditArray.toString()
             )
         )
     }
